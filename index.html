@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cyberpunk Gallery — Pollinations + Theatre.js</title>
+<meta name="description" content="Galeria cyberpunk que gera imagens via Pollinations e anima com Theatre.js">
+<style>
+  :root{
+    --bg1:#050319; --bg2:#081228; --neon:#ff2d95; --accent:#00e6ff; --muted:#9aa8b6;
+    --card:#081428;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:#e6eef8;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  header{padding:22px 34px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;gap:14px;align-items:center}
+  .logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--neon),#ffb86b);display:grid;place-items:center;font-weight:800;color:#071022}
+  h1{margin:0;font-size:18px}
+  .controls{display:flex;gap:8px;align-items:center}
+  .btn{background:linear-gradient(90deg,var(--neon),var(--accent));color:#071022;border:0;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:700}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px 10px;border-radius:8px;cursor:pointer}
+  main{padding:20px 34px 60px 34px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 10px 40px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:10px;min-height:380px}
+  .visual{flex:1;border-radius:8px;overflow:hidden;display:grid;place-items:center;background:linear-gradient(180deg,#020718, #061025)}
+  img.preview{width:100%;height:100%;object-fit:cover;display:block}
+  .meta{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .prompt{font-size:13px;color:var(--muted);flex:1;margin-right:8px}
+  .small{font-size:12px;color:var(--muted)}
+  footer{padding:28px;text-align:center;color:var(--muted)}
+  @media (max-width:1000px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:660px){.grid{grid-template-columns:1fr}header{padding:14px}main{padding:14px}}
+  theatre-studio, #theatre-studio { position: fixed; right: 12px; bottom: 12px; z-index: 9999; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">CP</div>
+    <div>
+      <h1>Cyberpunk Generator</h1>
+      <div style="font-size:13px;color:var(--muted)">Imagens via Pollinations • Animadas com Theatre.js</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="regenerate-all">Regenerate All</button>
+    <button class="ghost" id="toggle-studio">Toggle Studio (T)</button>
+  </div>
+</header>
+
+<main>
+  <section style="margin-bottom:18px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="ghost" id="prompt-synth">Synthwave Skyline</div>
+      <div class="ghost" id="prompt-city">Neon Megacity</div>
+      <div class="ghost" id="prompt-portrait">Cyborg Portrait</div>
+      <div class="ghost" id="prompt-samurai">Cyber Samurai</div>
+      <div style="color:var(--muted);font-size:13px">Clique para trocar o prompt do card selecionado</div>
+    </div>
+  </section>
+
+  <section class="grid" id="gallery">
+    <!-- cards serão injetados aqui -->
+  </section>
+</main>
+
+<footer>
+  Dica: pressione <strong>T</strong> para abrir/fechar o Theatre Studio e ajustar a animação dos cards (flutuação, brilho).
+</footer>
+
+<script type="module">
+  // bundle core+studio do Theatre para edição (prototipagem)
+  import 'https://cdn.jsdelivr.net/npm/@theatre/browser-bundles@0.5.0-insiders.88df1ef/dist/core-and-studio.js';
+  const { core, studio } = Theatre;
+
+  // configurações iniciais
+  const gallery = document.getElementById('gallery');
+  studio.initialize();
+  let studioVisible = true;
+  document.getElementById('toggle-studio').onclick = toggleStudio;
+  document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 't') toggleStudio(); });
+
+  function toggleStudio(){
+    const el = document.querySelector('theatre-studio, #theatre-studio');
+    if (!el) { studio.initialize(); return; }
+    el.style.display = (el.style.display === 'none') ? '' : 'none';
+    studioVisible = (el.style.display !== 'none');
+  }
+
+  // prompts cyberpunk (exemplos)
+  const PROMPTS = {
+    'Synthwave Skyline': 'synthwave skyline, neon grid horizon, vaporwave colors, cinematic lighting, digital art, highly detailed',
+    'Neon Megacity': 'cyberpunk neon megacity at night, rainy streets, holograms, cinematic, ultra-detailed, concept art',
+    'Cyborg Portrait': 'portrait of a cyborg with neon accents, hyper-detailed, cinematic lighting, futuristic, artstation',
+    'Cyber Samurai': 'neon samurai in rain, cyberpunk armor, cinematic, dramatic lighting, digital painting'
+  };
+
+  // card definitions (title, promptKey, model)
+  const CARDS = [
+    { title: 'Skyline', promptKey: 'Synthwave Skyline', model: 'german' },
+    { title: 'Megacity', promptKey: 'Neon Megacity', model: 'german' },
+    { title: 'Portrait', promptKey: 'Cyborg Portrait', model: 'german' },
+    { title: 'Samurai', promptKey: 'Cyber Samurai', model: 'german' },
+    { title: 'Variant A', promptKey: 'Neon Megacity', model: 'german' },
+    { title: 'Variant B', promptKey: 'Synthwave Skyline', model: 'german' }
+  ];
+
+  // cria projeto Theatre global para cards
+  const project = core.getProject('Cyberpunk Gallery Project');
+  const sheet = project.sheet('Cards Sheet');
+
+  // helper para criar DOM card
+  function createCard(def, index){
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.index = index;
+
+    const visual = document.createElement('div');
+    visual.className = 'visual';
+    const img = document.createElement('img');
+    img.className = 'preview';
+    img.alt = def.title;
+    img.src = ''; // preenchido em seguida
+    visual.appendChild(img);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const promptLabel = document.createElement('div');
+    promptLabel.className = 'prompt';
+    promptLabel.textContent = PROMPTS[def.promptKey];
+    const controls = document.createElement('div');
+
+    const regen = document.createElement('button');
+    regen.className = 'ghost';
+    regen.textContent = 'Regenerate';
+    const swap = document.createElement('button');
+    swap.className = 'ghost';
+    swap.textContent = 'Swap Prompt';
+
+    controls.appendChild(regen);
+    controls.appendChild(swap);
+    meta.appendChild(promptLabel);
+    meta.appendChild(controls);
+
+    card.appendChild(visual);
+    card.appendChild(meta);
+
+    // Theatre object for this card (animation props)
+    const objName = `Card ${index} - ${def.title}`;
+    const cardObj = sheet.object(objName, {
+      y: 0,
+      scale: 1,
+      glow: 1,
+      rotation: 0
+    });
+
+    // apply theatre values to DOM
+    cardObj.onValuesChange(v => {
+      visual.style.transform = `translateY(${v.y}px) rotate(${v.rotation}deg)`;
+      visual.style.filter = `drop-shadow(0 ${Math.max(4, v.glow*20)}px ${Math.max(10, v.glow*40)}px rgba(0,200,255,0.12))`;
+      visual.style.transition = 'transform 0.12s linear, filter 0.12s linear';
+      img.style.transform = `scale(${v.scale})`;
+    });
+
+    // regen handler
+    regen.onclick = () => {
+      regen.textContent = 'Generating...';
+      generatePollinationsImage(PROMPTS[def.promptKey], def.model).then(url => {
+        img.src = url;
+        regen.textContent = 'Regenerate';
+      }).catch(e => {
+        regen.textContent = 'Error';
+        console.error(e);
+      });
+    };
+
+    // swap prompt handler: cycle among PROMPTS keys
+    swap.onclick = () => {
+      const keys = Object.keys(PROMPTS);
+      const currentIndex = keys.indexOf(def.promptKey);
+      const next = keys[(currentIndex+1) % keys.length];
+      def.promptKey = next;
+      promptLabel.textContent = PROMPTS[next];
+      // regenerate with new prompt immediately
+      regen.click();
+    };
+
+    // initial generate
+    regen.click();
+
+    return { card, cardObj, img };
+  }
+
+  // mount cards
+  const cardObjs = [];
+  CARDS.forEach((d, i) => {
+    const { card, cardObj } = createCard(d, i);
+    gallery.appendChild(card);
+    cardObjs.push(cardObj);
+  });
+
+  // regenerate all
+  document.getElementById('regenerate-all').onclick = () => {
+    document.querySelectorAll('.card .ghost').forEach(btn => {
+      if (btn.textContent === 'Regenerate') btn.click();
+    });
+  };
+
+  // quick prompt buttons
+  document.getElementById('prompt-synth').onclick = () => {
+    // change first card prompt
+    CARDS[0].promptKey = 'Synthwave Skyline';
+    const btn = gallery.querySelector('[data-index="0"] .ghost');
+    if (btn) btn.click();
+  };
+  document.getElementById('prompt-city').onclick = () => { CARDS[1].promptKey = 'Neon Megacity'; gallery.querySelector('[data-index="1"] .ghost')?.click(); };
+  document.getElementById('prompt-portrait').onclick = () => { CARDS[2].promptKey = 'Cyborg Portrait'; gallery.querySelector('[data-index="2"] .ghost')?.click(); };
+  document.getElementById('prompt-samurai').onclick = () => { CARDS[3].promptKey = 'Cyber Samurai'; gallery.querySelector('[data-index="3"] .ghost')?.click(); };
+
+  // === Pollinations helper ===
+  // returns Promise<string> resolving to image URL
+  function generatePollinationsImage(prompt, model='german'){
+    // encode prompt for URL
+    const encoded = encodeURIComponent(prompt);
+    // Pollinations public endpoint (simple)
+    // model param used where supported
+    const url = `https://image.pollinations.ai/prompt/${encoded}?model=${encodeURIComponent(model)}`;
+    // the endpoint returns an image directly — we can use the URL as src
+    // but to ensure image is loaded before resolving, create Image and wait for onload
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      // cache-busting small random to reduce likelihood of same cached image when regenerating
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img.src);
+      img.onerror = (e) => reject(new Error('Falha ao carregar imagem Pollinations: ' + e?.message));
+      img.src = url + '&cb=' + Math.floor(Math.random()*999999);
+      // safety timeout
+      setTimeout(() => {
+        if (!img.complete) {
+          // still not loaded; resolve with url anyway (browser may try)
+          resolve(img.src);
+        }
+      }, 8000);
+    });
+  }
+
+  // === small demo animation loop: subtle floating of each card via theatreObj.set() ===
+  project.ready.then(() => {
+    let t0 = performance.now();
+    function loop(now){
+      const t = (now - t0)/1000;
+      sheet.sequence && sheet.sequence.play && sheet.sequence.play({iterationCount: Infinity, range: [0,6]}) // harmless if no sequence
+      // animate each card object manually for demo
+      cardObjs.forEach((obj, i) => {
+        const offset = i * 0.3;
+        const y = Math.sin(t*1.2 + offset) * 8;
+        const scale = 1 + Math.cos(t*0.9 + offset)*0.015;
+        const glow = 1 + (Math.sin(t*0.6 + offset)*0.5 + 0.5)*0.8;
+        const rot = Math.sin(t*0.25 + offset) * 1.5;
+        obj.set({ y, scale, glow, rotation: rot });
+      });
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  });
+
+  // initial small camera: if Studio exists, try to open project (some Studio builds support API)
+  project.ready.then(() => {
+    try { studio.ui && studio.ui.openProject && studio.ui.openProject(project); } catch(e){}
+  });
+
+</script>
+</body>
+</html>
